@@ -13,7 +13,7 @@ from __future__ import annotations
 import numpy as np
 import torch
 import torch.nn as nn
-from sklearn.metrics import f1_score
+from sklearn.metrics import f1_score, roc_auc_score, accuracy_score
 from sklearn.preprocessing import StandardScaler
 
 
@@ -42,10 +42,13 @@ class HallucinationProbe(nn.Module):
         Args:
             input_dim: Feature vector dimensionality.
         """
+
         self._net = nn.Sequential(
-            nn.Linear(input_dim, 256),
-            nn.ReLU(),
-            nn.Linear(256, 1),
+            nn.Linear(input_dim, 64),   
+            nn.LayerNorm(64),
+            nn.GELU(),
+            nn.Dropout(0.5),            # for heavy regularization since I train for 1500 epochs
+            nn.Linear(64, 1),
         )
 
     # ------------------------------------------------------------------
@@ -95,15 +98,17 @@ class HallucinationProbe(nn.Module):
         # ------------------------------------------------------------------
         # STUDENT: Replace or extend the training loop below.
         # ------------------------------------------------------------------
-        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
+        optimizer = torch.optim.AdamW(self.parameters(), lr=3e-4, weight_decay=1e-1) # change Adam to AdamW
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=1500) # for lr scheduling
 
         self.train()
-        for _ in range(200):
+        for _ in range(1500): # more epochs
             optimizer.zero_grad()
             logits = self(X_t)
             loss = criterion(logits, y_t)
             loss.backward()
             optimizer.step()
+            scheduler.step()
         # ------------------------------------------------------------------
 
         self.eval()
@@ -175,4 +180,3 @@ class HallucinationProbe(nn.Module):
             logits = self(X_t)
             prob_pos = torch.sigmoid(logits).numpy()
         return np.stack([1.0 - prob_pos, prob_pos], axis=1)
-
