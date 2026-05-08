@@ -443,3 +443,31 @@ I also experimented with the split strategy, mainly to understand how sensitive 
 The final fixed development split with seed `43` was therefore used as the main reference point for direct ablation comparisons. This made the experiments much easier to compare under the same data partition. At the same time, multi-split evaluation was still informative as a more conservative robustness check.
 
 This matters for interpreting the final results: some strong checkpoints did not hold up equally well under different splits, which is exactly why I do not treat splitting as the main source of gains. Its role was mostly diagnostic and organizational.
+
+## 4. Conclusion
+
+This project ended up being much more experimental than I initially expected. In total, I conducted well over **100** runs in search of better metrics, more stable training, and a final configuration that could be reproduced reliably.
+
+The main conclusion of the project is that the largest gains came from the **aggregation step**, not from the probe. Once I moved away from broad token averaging and refocused the representation on the **last real token**, performance improved substantially. The strongest aggregation design was a weighted combination of the top 3 transformer layers, with weights:
+
+> `[0.3, 0.3, 0.4]`
+
+This turned out to be much more important than any single probe modification. In my view, this is the central technical result of the project: the main source of useful signal lies in how the hidden states are compressed into features.
+
+The probe still mattered, but mostly as a **polishing stage** rather than the main engine of improvement. Poor probe choices could absolutely make the model worse: reducing the hidden dimension too much, adding excessive architectural complexity, introducing bottlenecks, lowering the learning rate too aggressively, or applying dimensionality reduction all led to worse results. At the same time, probe-side changes alone did not create the same kind of substantial gains as aggregation. The best probe was still relatively compact, and the main improvements there came from regularization and training setup rather than from making the classifier much more sophisticated.
+
+Another important conclusion is that the dataset is small enough that **overfitting is very difficult to avoid**. I tried to address this in several ways: stronger regularization, fixed seeds, a stable development split, geometric features, and a more careful training regime. These changes did help, especially in terms of reproducibility and stability, but only to a point. My interpretation is that the main bottleneck is the lack of enough data (a very small dataset made it very difficult for the model to learn how to generalize rather than simply memorize) rather than the lack of additional modeling tricks.
+
+The geometric features were also useful to think about in this context. They did not replace the hidden-state aggregation and were never the main source of gains, but a compact set of them did add a small amount of complementary signal. This was enough to justify keeping them in the final configuration, especially since they remained lightweight and interpretable.
+
+A related lesson from this project is that **reproducibility and robustness are not the same thing**. Some settings produced very strong results on one split but did not hold up equally well under multi-split evaluation. For that reason, I treated the strongest fixed-split result and the more conservative multi-split picture as two different but equally important views of the model. The strongest result was obtained on a fixed stratified development split, while multi-split evaluation produced lower but still above-baseline performance, indicating substantial sensitivity to split composition on the small labeled dataset.
+
+Overall, I would summarize the project like this:
+
+- the biggest gains came from **last-token-centered weighted top-layer aggregation**;
+- geometric features helped slightly, but only as a lightweight extension;
+- the probe was important mainly for **refinement and stability**, not for fundamental gains;
+- the small dataset made overfitting and split sensitivity almost inevitable;
+- and the final submission should therefore be interpreted as a strong best-case checkpoint together with a more conservative robustness picture.
+
+Even though the project was often unstable and frustrating, I think it still led to a clear technical story, which I described above. The final solution is simple enough and supported by a large number of ablations and negative results rather than by a single lucky guess.
