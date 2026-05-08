@@ -5,12 +5,34 @@
 
 1. Reproducibility Instructions  
 2. Final Solution Description  
+3. Experiments and Failed Attempts  
+   3.1 Aggregation experiments  
+   3.2 Geometric features experiments  
+   3.3 Probe experiments  
+   3.4 Splitting / evaluation note  
+4. Conclusion
 
 ---
 
 ## 1. Reproducibility Instructions
 
-This repository is intended to be run with the provided official `solution.py` pipeline. The final submission is self-contained and uses the allowed editable components of the project:
+### Exact commands
+
+The submitted repository can be reproduced with the following commands:
+
+```bash
+git clone https://github.com/lapshinaaa/SMILES-2026-Hallucination-Detection
+cd SMILES-2026-Hallucination-Detection
+pip install -r requirements.txt
+python solution.py 
+```
+
+This repository is intended to be run with the provided official `solution.py` pipeline. Running it will produce:
+
+- `results.json`
+- `predictions.csv`
+
+The final submission is self-contained and uses the allowed editable components of the project:
 
 - `aggregation.py`
 - `probe.py`
