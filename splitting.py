@@ -50,7 +50,7 @@ def split_data(
         Replace or extend the skeleton below.  The only contract is that the
         function returns the list described above.
     """
-
+    random_state = 43  # for the experiment
     idx = np.arange(len(y))
 
     idx_train_val, idx_test = train_test_split(
