@@ -336,3 +336,110 @@ The geometric-feature experiments suggested that compact handcrafted features ca
 The main lesson here was not that geometry replaced the hidden-state aggregation. It did not. The hidden-state-only representation already carried most of the useful signal. What the geometric block did was add a small amount of extra information about magnitude, agreement, and drift across the top layers.
 
 After deciding to keep the richer geometric block in the final candidate, I moved on to the next question: **how much can the downstream probe itself still improve the result?**
+
+### 3.3 Probe experiments
+
+After settling on a strong aggregation strategy, I turned to the probe. The main question here was not whether the classifier alone could fundamentally transform the result, but whether a better readout layer could extract the signal from the improved feature representation more effectively.
+
+At this stage, my working assumption was the following: once the hidden-state aggregation becomes good enough, the probe should help with polishing the decision boundary, regularizing the training process, and improving stability — but it should not be expected to create the same kind of large gains as aggregation itself.
+
+### Hypotheses
+
+- **P1.** A slightly smaller classifier may generalize better on the small dataset if the original probe is too expressive.
+- **P2.** Regularization through dropout, weight decay, and longer or shorter training may help stabilize the final classifier.
+- **P3.** More architectural complexity may help if the aggregated representation still needs a more expressive nonlinear readout.
+- **P4.** If the representation is already strong, the best probe may actually remain relatively simple, with improvements coming mostly from careful regularization and training setup.
+
+### Probe ablation table
+
+| ID | Probe modification | Feature dim | Test Acc | Test F1 | Test AUROC | Main takeaway |
+|---|---|---:|---:|---:|---:|---|
+| P1 | **Smaller hidden layer** `256 -> 128 -> 1` | 896 | 70.19% | 82.49% | 74.28% | Too small; thresholded metrics collapsed toward baseline |
+| P2 | **Dropout only** (hidden 256, dropout `0.2`) | 896 | 73.08% | 81.58% | 74.19% | Slight change, but no meaningful improvement |
+| P3 | **Weight decay only** | 896 | 74.04% | 83.44% | 74.19% | Better thresholded metrics, AUROC unchanged |
+| P4 | **100 epochs** (same simple probe) | 896 | 70.19% | 81.21% | 74.50% | Too short; undertrained |
+| P5 | **Simple/original probe** on improved aggregation checkpoint | 901 | 75.00% | 83.95% | 74.02% | Strong thresholded metrics; simple probe remained highly competitive |
+| P6 | **Dropout + weight decay** on improved aggregation checkpoint | 901 | 73.08% | 81.82% | 74.99% | Best earlier AUROC, but weaker accuracy/F1 |
+| P7 | **2-layer bottleneck MLP** on improved aggregation checkpoint | 901 | 69.23% | 79.49% | 69.91% | Clear failure; over-compression hurt badly |
+| P8 | **Extra linear/ReLU layers or lower LR** | 901 | — | — | — | Consistently worsened performance; reverted |
+| P9 | **Final selected probe** with strong regularization and long training | 905 | 77.88% | 86.06% | 79.72% | Best final fixed-split checkpoint |
+
+### Commentary
+
+#### P1–P4: smaller or lightly modified probes were not enough
+
+My first probe experiments were fairly local changes around the baseline classifier. I tested a smaller hidden layer, dropout alone, weight decay alone, and a shorter training horizon.
+
+These experiments were useful because they showed that changing the probe can definitely make the result worse, but also that probe-side improvements do not automatically translate into large gains. In particular:
+
+- reducing the hidden dimension too much made the classifier too weak,
+- mild regularization alone did not transform the results,
+- and training for only 100 epochs was clearly too short.
+
+So at this stage, the main lesson was that the probe still needed some nonlinear capacity, but the core limitation of the system was not simply “the classifier is too small.”
+
+#### P5–P8: more complexity was not the answer either
+
+After improving aggregation, I then tested whether the stronger feature representation would benefit from a more ambitious classifier.
+
+Some of these changes initially seemed promising:
+- the simple probe on the stronger aggregation checkpoint already gave good thresholded metrics,
+- a regularized variant slightly improved AUROC,
+- and this suggested that the probe could still help shape the final decision boundary.
+
+However, once I pushed harder into deeper or more complex architectures, the results deteriorated. In particular:
+- bottleneck probes over-compressed the feature space,
+- extra linear/ReLU layers hurt,
+- lower learning rates did not help,
+- PCA-based dimensionality reduction also failed,
+- and a purely linear probe was clearly too weak.
+
+This made the overall pattern much clearer: the probe did matter, but mostly as a careful readout layer, not as the main engine of improvement.
+
+#### P9: final probe design
+
+The final probe I kept is still relatively compact, but much more carefully regularized than the early variants:
+
+```python
+self._net = nn.Sequential(
+    nn.Linear(input_dim, 64),
+    nn.LayerNorm(64),
+    nn.GELU(),
+    nn.Dropout(0.5),
+    nn.Linear(64, 1),
+)
+```
+
+The corresponding training loop uses:
+- `AdamW` instead of `Adam`,
+- learning rate `3e-4`,
+- weight decay `1e-1`,
+- cosine annealing scheduling,
+- and `1500` training epochs.
+
+This final setup was chosen because it gave me the strongest final fixed-split checkpoint:
+
+- **Test accuracy:** 77.88%
+- **Test F1:** 86.06%
+- **Test AUROC:** 79.72%
+
+The interesting part here is that the final probe is not especially deep or elaborate. What changed most is the training regime: stronger regularization, longer training, and a more deliberate optimizer/scheduler setup.
+
+### Probe conclusion
+
+The probe experiments led me to the following conclusion:
+
+- the probe is **not** the main source of improvement in this project,
+- but it still matters as a final polishing stage,
+- because poor architectural choices can absolutely damage performance,
+- while a well-regularized compact classifier can help extract the signal from a strong aggregation setup.
+
+So although the final probe contributed to the best overall checkpoint, I would still describe it as a refinement layer, not the fundamental reason the model worked. The main gains came from the aggregation. The probe mostly determined how cleanly and stably that information could be turned into final predictions.
+
+### 3.4 Splitting / evaluation note
+
+I also experimented with the split strategy, mainly to understand how sensitive the model was to train/validation/test partitioning. The most important role of splitting was not to create large performance gains by itself, but to reveal how unstable some seemingly strong checkpoints actually were.
+
+The final fixed development split with seed `43` was therefore used as the main reference point for direct ablation comparisons. This made the experiments much easier to compare under the same data partition. At the same time, multi-split evaluation was still informative as a more conservative robustness check.
+
+This matters for interpreting the final results: some strong checkpoints did not hold up equally well under different splits, which is exactly why I do not treat splitting as the main source of gains. Its role was mostly diagnostic and organizational.
