@@ -12,10 +12,30 @@ from __future__ import annotations
 
 import numpy as np
 import torch
+import random
 import torch.nn as nn
 from sklearn.metrics import f1_score, roc_auc_score, accuracy_score
 from sklearn.preprocessing import StandardScaler
 
+# ------------------------------------------------------------------
+# STUDENT: Fix random seeds for reproducible training runs.
+# ------------------------------------------------------------------
+def _set_seed(seed: int = 42) -> None:
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+
+    # for CUDA determinism 
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+    try:
+        torch.use_deterministic_algorithms(True)
+    except Exception:
+        pass
 
 class HallucinationProbe(nn.Module):
     """Binary classifier that detects hallucinations from hidden-state features.
@@ -82,6 +102,7 @@ class HallucinationProbe(nn.Module):
         Returns:
             ``self`` (for method chaining).
         """
+        _set_seed(42)
         X_scaled = self._scaler.fit_transform(X)
 
         self._build_network(X_scaled.shape[1])
