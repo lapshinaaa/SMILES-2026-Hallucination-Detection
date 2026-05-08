@@ -196,3 +196,139 @@ The biggest improvements came from the feature representation rather than from m
 - and using a compact but strongly regularized nonlinear probe.
 
 Broader pooling over token positions, wider layer windows, dimensionality reduction, and much more complex probe variants were explored, but did not provide a better final trade-off. Those experiments are described in the next section.
+
+## 3. Experiments and Failed Attempts
+
+### 3.1 Aggregation experiments
+
+Aggregation turned out to be the most important part of the project. I started from the default baseline, where the feature vector was taken from the **last real token of the final transformer layer**, and then gradually tested whether a richer or more targeted aggregation strategy could improve the result.
+
+At this stage, I kept everything else as comparable as possible and treated aggregation as the main source of change.
+
+### Hypotheses
+
+- **H1.** A broader sequence-level summary may help, because the hallucination signal could be distributed across the whole answer rather than concentrated in one token.
+- **H2.** If broad pooling washes out the useful signal, the model may benefit from focusing on the **last real token** instead.
+- **H3.** If the last token is important, aggregating it across several top layers may be more stable than using only one layer.
+- **H4.** The top layers may not contribute equally, so a **weighted** top-3 mixture may outperform a simple average.
+
+### Aggregation ablation table
+
+| ID | Aggregation strategy | Feature dim | Val AUROC | Test Acc | Test F1 | Test AUROC | Main takeaway |
+|---|---|---:|---:|---:|---:|---:|---|
+| H1 | **Rich concat**: mean-pooled last 4 layers over all real tokens **+** last real token from the final layer | 1792 | 66.06% | 69.23% | 81.61% | 49.71% | Strong drop; feature expansion hurt badly |
+| H2 | **Mean pool over last 4 layers** (all real tokens, then average across layers) | 896 | 54.57% | 70.19% | 82.49% | 53.16% | Better than H1, but still weak |
+| H3 | **Final-layer mean pool** over all real tokens | 896 | 54.22% | 70.19% | 82.49% | 53.47% | Broad token averaging still weak |
+| H4 | **Top-2 last-token average** | 896 | 65.82% | 74.04% | 82.58% | 73.40% | First major jump; localized representation works |
+| H5 | **Top-3 weighted last-token** `[0.2, 0.3, 0.5]` | 896 | 66.90% | 74.04% | 83.23% | 73.97% | Better than top-2 averaging |
+| H6 | **Top-3 weighted last-token** `[0.15, 0.25, 0.6]` | 896 | 66.64% | 75.00% | 83.75% | 73.75% | More final-layer-heavy; AUROC dipped slightly |
+| H7 | **Top-3 weighted last-token** `[0.3, 0.3, 0.4]` | 896 | 67.34% | 74.04% | 83.23% | 74.30% | Best hidden-state-only aggregation in this series |
+
+### Commentary
+
+#### H1–H3: broad pooling did not help
+
+My first idea was to make the aggregation richer and more expressive by combining global information from many tokens with a local final-token summary. In practice, that did not work.
+
+The rich concatenation experiment in **H1** performed especially poorly. The most likely reason is that the feature vector became too large relative to the dataset size and introduced too much redundancy and noise.
+
+Then I simplified the design and tested plain mean pooling across all real tokens, first over the last 4 layers and then over the final layer only (**H2–H3**). These variants also stayed weak. This suggested that the useful signal is **not distributed uniformly across the sequence**, and that averaging over all token positions mostly washes it out.
+
+#### H4: the important signal is localized
+
+The first major improvement came when I stopped treating all token positions as equally informative and switched to the **last real token** only.
+
+In **H4**, I averaged the last token across the top 2 transformer layers. This immediately produced a large jump in AUROC and confirmed the main intuition behind the later experiments: the representation that matters most is highly localized near the end of the response.
+
+This was the turning point of the aggregation experiments.
+
+#### H5–H7: top-3 weighted last-token aggregation
+
+Once the last-token hypothesis started working, I moved to a top-3-layer version and tested whether the three top layers should contribute equally or not.
+
+With everything else held constant, the weighted top-3 variants were clearly better than the broad pooling strategies.
+
+- In **H5**, the weighting `[0.2, 0.3, 0.5]` already improved over the simple top-2 average.
+- In **H6**, I made the final layer more dominant with `[0.15, 0.25, 0.6]`. This gave strong thresholded metrics, but AUROC became slightly worse.
+- In **H7**, the more balanced weighting `[0.3, 0.3, 0.4]` gave the strongest overall hidden-state-only result in this series.
+
+This suggests that the final layer should have a slight advantage, but not enough to drown out the signal from the preceding top layers.
+
+### Other aggregation ideas I tested but did not keep
+
+I also tested several nearby ideas that I did not retain in the final solution:
+- pooling over the last 2 or 3 token positions instead of only the final token,
+- using broader local tails with recency weighting,
+- and extending the aggregation to 4 or 5 top layers.
+
+These directions did not improve the metric in a meaningful way. In general, once I moved away from the single last token, the representation became noisier. Similarly, increasing the layer window beyond the top 3 layers did not provide a better trade-off.
+
+### Aggregation conclusion
+
+The aggregation experiments led to a very clear conclusion:
+
+- the hallucination signal is **not** best captured by broad token averaging,
+- the most useful information is concentrated at the **last real token**,
+- and the best representation comes from combining the **top 3 transformer layers** with a moderately balanced weighting:
+
+> `[0.3, 0.3, 0.4]`
+
+After establishing this as the strongest hidden-state-only aggregation design, I moved on to the next question: **do geometric features contribute anything on top of this representation?**
+
+### 3.2 Geometric features experiments
+
+Once the hidden-state-only aggregation had stabilized, I wanted to test whether a very small number of geometric/statistical features could add complementary information without making the representation much larger.
+
+### Hypotheses
+
+- **G1.** A compact set of geometric features may help, because hidden-state magnitude and agreement across the top layers could carry useful information that is not fully captured by the weighted hidden-state vector alone.
+- **G2.** If a small geometric block helps, then adding a few more carefully chosen features describing cross-layer similarity and drift may improve stability further.
+
+### Geometric-feature ablation table
+
+| ID | Geometric feature setup | Feature dim | Val AUROC | Test Acc | Test F1 | Test AUROC | Main takeaway |
+|---|---|---:|---:|---:|---:|---:|---|
+| G1 | **5 compact geometric features** added on top of the best last-token top-3 aggregation | 901 | 66.66% | 74.04% | 83.23% | 74.88% | Small but real improvement over the hidden-state-only setup |
+
+### Commentary
+
+#### G1: a small geometric block helped
+
+The first geometric block I added contained five compact features:
+
+1. number of real tokens,  
+2. norm of the final-layer last-token vector,  
+3. mean norm of the top-3 last-token vectors,  
+4. standard deviation of those norms,  
+5. cosine similarity between the last-token vectors of the final two layers.  
+
+This changed the feature dimension only slightly, from **896** to **901**, but produced a small and meaningful gain in AUROC.
+
+My interpretation was that the main signal still came from the aggregated hidden representation, but these features added lightweight information about magnitude and agreement across the top layers.
+
+#### G2: I then expanded the geometric block
+
+Since the first 5-feature version helped, I extended the block further by adding:
+
+- `cos_last13`
+- `l2_last12`
+- `l2_last13`
+- `norm_ratio`
+
+In words, these features describe:
+- cosine similarity between layers `-1` and `-3`,
+- L2 distance between layers `-1` and `-2`,
+- L2 distance between layers `-1` and `-3`,
+- and the ratio between the final-layer norm and the mean top-3-layer norm.
+
+The motivation here was simple: if geometric information is useful at all, then the model may also benefit from a slightly richer description of cross-layer agreement and representation drift. My expectation was that these features could give the probe a bit more structure to work with and make training more stable without changing the overall design of the model.
+
+I did not keep a clean isolated metric table for this second extension alone, because by that point the later runs were already intertwined with probe tuning. Still, this richer geometric block was the one I kept in the strongest final configuration, so in practice I considered it more useful than the smaller 5-feature version.
+
+### Geometric-feature conclusion
+
+The geometric-feature experiments suggested that compact handcrafted features can help, but only when they stay small and closely tied to the same last-token top-layer representation that already worked well.
+
+The main lesson here was not that geometry replaced the hidden-state aggregation. It did not. The hidden-state-only representation already carried most of the useful signal. What the geometric block did was add a small amount of extra information about magnitude, agreement, and drift across the top layers.
+
+After deciding to keep the richer geometric block in the final candidate, I moved on to the next question: **how much can the downstream probe itself still improve the result?**
