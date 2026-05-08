@@ -26,7 +26,7 @@ def split_data(
     df: pd.DataFrame | None = None,
     test_size: float = 0.15,
     val_size: float = 0.15,
-    random_state: int = 42,
+    random_state: int = 43,
 ) -> list[tuple[np.ndarray, np.ndarray | None, np.ndarray]]:
     """Split dataset indices into train, validation, and test subsets.
 
@@ -50,7 +50,7 @@ def split_data(
         Replace or extend the skeleton below.  The only contract is that the
         function returns the list described above.
     """
-    random_state = 43  # for the experiment
+    random_state = 43  # for reproducibility 
     idx = np.arange(len(y))
 
     idx_train_val, idx_test = train_test_split(
