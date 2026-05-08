@@ -363,7 +363,7 @@ After deciding to keep the richer geometric block in the final candidate, I move
 
 After settling on a strong aggregation strategy, I turned to the probe. The main question here was not whether the classifier alone could fundamentally transform the result, but whether a better readout layer could extract the signal from the improved feature representation more effectively.
 
-At this stage, my working assumption was the following: once the hidden-state aggregation becomes good enough, the probe should help with polishing the decision boundary, regularizing the training process, and improving stability — but it should not be expected to create the same kind of large gains as aggregation itself.
+At this stage, my working assumption was the following: once the hidden-state aggregation becomes good enough, the probe should mainly refine the decision boundary, regularizing the training process, and improving stability — but it should not be expected to create the same kind of large gains as aggregation itself.
 
 ### Hypotheses
 
@@ -478,7 +478,7 @@ This turned out to be much more important than any single probe modification. In
 
 The probe still mattered, but mostly as a **polishing stage** rather than the main engine of improvement. Poor probe choices could absolutely make the model worse: reducing the hidden dimension too much, adding excessive architectural complexity, introducing bottlenecks, lowering the learning rate too aggressively, or applying dimensionality reduction all led to worse results. At the same time, probe-side changes alone did not create the same kind of substantial gains as aggregation. The best probe was still relatively compact, and the main improvements there came from regularization and training setup rather than from making the classifier much more sophisticated.
 
-Another important conclusion is that the dataset is small enough that **overfitting is very difficult to avoid**. I tried to address this in several ways: stronger regularization, fixed seeds, a stable development split, geometric features, and a more careful training regime. These changes did help, especially in terms of reproducibility and stability, but only to a point. My interpretation is that the main bottleneck is the lack of enough data (a very small dataset made it very difficult for the model to learn how to generalize rather than simply memorize) rather than the lack of additional modeling tricks.
+Another important conclusion is that the dataset is small enough that **overfitting is very difficult to avoid**. I tried to address this in several ways: stronger regularization, fixed seeds, a stable development split, geometric features, and a more careful training regime. These changes did help, especially in terms of reproducibility and stability, but only to a point. My interpretation is that the main bottleneck is the data regime itself: the dataset is small enough that learning robust generalization is much harder than memorizing training patterns.
 
 The geometric features were also useful to think about in this context. They did not replace the hidden-state aggregation and were never the main source of gains, but a compact set of them did add a small amount of complementary signal. This was enough to justify keeping them in the final configuration, especially since they remained lightweight and interpretable.
 
