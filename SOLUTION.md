@@ -197,7 +197,11 @@ The biggest improvements came from the feature representation rather than from m
 
 Broader pooling over token positions, wider layer windows, dimensionality reduction, and much more complex probe variants were explored, but did not provide a better final trade-off. Those experiments are described in the next section.
 
+
+
 ## 3. Experiments and Failed Attempts
+
+Before discussing the experiments, I want to clarify the metric choice. In the repository instructions, it is stated that **accuracy on `test.csv` is the primary competition metric**. At the same time, during the evaluation runs, the printed summary highlights **Test AUROC** as the “primary metric.” Because of this mismatch, I treated both metrics as important during development. In practice, I tried to improve the final classification quality measured by accuracy, while also monitoring AUROC as a threshold-independent measure of ranking quality.
 
 ### 3.1 Aggregation experiments
 
