@@ -1,6 +1,8 @@
 # Hallucination Detection Project Submission  
 ## Anastasiia Lapshina — SMILES-2026
 
+**Predictions file:** [predictions.csv (Google Drive)](https://drive.google.com/file/d/1EnrgExjByO4xD4Q_nFl96bZG-S-bq4CQ/view?usp=sharing)
+
 ## Contents
 
 1. Reproducibility Instructions  
